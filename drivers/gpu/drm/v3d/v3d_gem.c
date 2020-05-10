@@ -281,6 +281,27 @@ v3d_invalidate_caches(struct v3d_dev *v3d)
 	v3d_invalidate_slices(v3d, 0);
 }
 
+static void
+v3d_attach_object_fences(struct v3d_bo **bos, int bo_count,
+			 struct dma_fence *fence)
+{
+	int i;
+
+	for (i = 0; i < bo_count; i++) {
+		/* XXX: Use shared fences for read-only objects. */
+		reservation_object_add_excl_fence(bos[i]->base.resv, fence);
+	}
+}
+
+static void
+v3d_unlock_bo_reservations(struct v3d_bo **bos,
+			   int bo_count,
+			   struct ww_acquire_ctx *acquire_ctx)
+{
+	drm_gem_unlock_reservations((struct drm_gem_object **)bos, bo_count,
+				    acquire_ctx);
+}
+
 /* Takes the reservation lock on all the BOs being referenced, so that
  * at queue submit time we can update the reservations.
  *
@@ -323,7 +344,7 @@ v3d_lock_bo_reservations(struct v3d_job *job,
  * BO list and reference counting for the lifetime of the job.
  *
  * Note that this function doesn't need to unreference the BOs on
- * failure, because that will happen at v3d_exec_cleanup() time.
+ * failure, because that will happen at v3d_job_free() time.
  */
 static int
 v3d_lookup_bos(struct drm_device *dev,

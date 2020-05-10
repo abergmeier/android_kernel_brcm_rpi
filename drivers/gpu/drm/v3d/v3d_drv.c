@@ -166,7 +166,17 @@ v3d_postclose(struct drm_device *dev, struct drm_file *file)
 	kfree(v3d_priv);
 }
 
-DEFINE_DRM_GEM_SHMEM_FOPS(v3d_drm_fops);
+static const struct file_operations v3d_drm_fops = {
+	.owner = THIS_MODULE,
+	.open = drm_open,
+	.release = drm_release,
+	.unlocked_ioctl = drm_ioctl,
+	.mmap = v3d_mmap,
+	.poll = drm_poll,
+	.read = drm_read,
+	.compat_ioctl = drm_compat_ioctl,
+	.llseek = noop_llseek,
+};
 
 /* DRM_AUTH is required on SUBMIT_CL for now, while we don't have GMP
  * protection between clients.  Note that render nodes would be be
@@ -185,6 +195,12 @@ static const struct drm_ioctl_desc v3d_drm_ioctls[] = {
 	DRM_IOCTL_DEF_DRV(V3D_SUBMIT_CSD, v3d_submit_csd_ioctl, DRM_RENDER_ALLOW | DRM_AUTH),
 };
 
+static const struct vm_operations_struct v3d_vm_ops = {
+	.fault = v3d_gem_fault,
+	.open = drm_gem_vm_open,
+	.close = drm_gem_vm_close,
+};
+
 static struct drm_driver v3d_drm_driver = {
 	.driver_features = (DRIVER_GEM |
 			    DRIVER_RENDER |
@@ -197,11 +213,16 @@ static struct drm_driver v3d_drm_driver = {
 	.debugfs_init = v3d_debugfs_init,
 #endif
 
-	.gem_create_object = v3d_create_object,
+	.gem_free_object_unlocked = v3d_free_object,
+	.gem_vm_ops = &v3d_vm_ops,
+
 	.prime_handle_to_fd = drm_gem_prime_handle_to_fd,
 	.prime_fd_to_handle = drm_gem_prime_fd_to_handle,
+	.gem_prime_import = drm_gem_prime_import,
+	.gem_prime_export = drm_gem_prime_export,
+	.gem_prime_get_sg_table	= v3d_prime_get_sg_table,
 	.gem_prime_import_sg_table = v3d_prime_import_sg_table,
-	.gem_prime_mmap = drm_gem_prime_mmap,
+	.gem_prime_mmap = v3d_prime_mmap,
 
 	.ioctls = v3d_drm_ioctls,
 	.num_ioctls = ARRAY_SIZE(v3d_drm_ioctls),
